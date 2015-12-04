@@ -1,0 +1,58 @@
+---
+- apt_repository: repo='ppa:fkrull/deadsnakes' state=present
+  when: ansible_distribution in [ 'Ubuntu' ]
+
+- apt_key: id=C7917B12 keyserver=keyserver.ubuntu.com
+  when: ansible_distribution in [ 'Ubuntu' ]
+
+
+- name: Add Jupyter group
+  group: name={{ jupyter_unix_group }}
+
+- name: Add Jupyter user
+  user: name="{{ jupyter_unix_user }}" group="{{ jupyter_unix_group }}" home="{{ jupyter_root }}"
+
+
+- name: Ensure Basic Packages installed
+  apt: pkg={{ item }} state=installed
+  with_items:
+  - python3.5
+  - python3.5-dev
+  - libncurses5-dev
+  - python-dev
+  - python-pip
+  - python3-pip
+  - python3-dev
+  - python3-matplotlib
+  - python3-scipy
+  - python3-numpy
+  - python3-pandas
+  - python3-psycopg2
+  - libpq-dev
+  - postgresql-server-dev-9.3
+  - supervisor
+
+
+- name: download foo.conf
+  get_url: url=https://bootstrap.pypa.io/get-pip.py
+      dest=/usr/local/get-pip.py mode=0644
+
+- command: python3 /usr/local/get-pip.py
+    creates=/usr/local/bin/pip3
+- command: pip3 install setuptools --upgrade
+- command: pip3 install --upgrade ipython[all] jupyter[all] jupyter_core jinja2 zmq tornado jsonschema pandas ipython-sql psycopg2
+
+- file: path={{ jupyter_root }} state=directory
+    owner={{ jupyter_unix_user }} group={{ jupyter_unix_group }}
+    recurse=True
+
+
+- copy: src={{ item.src }} dest={{ item.dest }}
+  with_items:
+    - { src: "jupyter.htpasswd", dest: "/etc/nginx/.htpasswd" }
+    - { src: "jupyter-nginx.conf", dest: "/etc/nginx/sites-enabled/jupyter.conf" }
+  notify: restart nginx
+
+- template: src=jupyter-supervisor.conf dest=/etc/supervisor/conf.d/jupyter.conf
+    owner=root group=root
+  notify: restart supervisor
